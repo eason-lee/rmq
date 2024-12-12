@@ -177,6 +177,7 @@ func (r *rbroker) Publish(topic string, msg *broker.Message, opts ...broker.Publ
 	for _, o := range opts {
 		o(&options)
 	}
+	exchangeName := r.conn.exchange.Name
 
 	if options.Context != nil {
 		if value, ok := options.Context.Value(deliveryMode{}).(uint8); ok {
@@ -227,6 +228,11 @@ func (r *rbroker) Publish(topic string, msg *broker.Message, opts ...broker.Publ
 		if value, ok := options.Context.Value(appID{}).(string); ok {
 			m.AppId = value
 		}
+
+		if value, ok := options.Context.Value(delayTime{}).(int32); ok {
+			m.Headers["x-delay"] = int32(value)
+			exchangeName = r.conn.delayExchange.Name
+		}
 	}
 
 	for k, v := range msg.Header {
@@ -241,7 +247,7 @@ func (r *rbroker) Publish(topic string, msg *broker.Message, opts ...broker.Publ
 		return errors.New("connection is nil")
 	}
 
-	return r.conn.Publish(r.conn.exchange.Name, topic, m)
+	return r.conn.Publish(exchangeName, topic, m)
 }
 
 func (r *rbroker) Subscribe(topic string, handler broker.Handler, opts ...broker.SubscribeOption) (broker.Subscriber, error) {
@@ -354,6 +360,10 @@ func (r *rbroker) Init(opts ...broker.Option) error {
 
 func (r *rbroker) Connect() error {
 	if r.conn == nil {
+		// var delayEx  *Exchange
+		// if d, ok := r.opts.Context.Value(delayExchange{}).(bool); ok && d{
+		// 	delayEx = r.getDelayExchange()
+		// }
 		r.conn = newRabbitMQConn(
 			r.getExchange(),
 			r.opts.Addrs,
@@ -362,6 +372,7 @@ func (r *rbroker) Connect() error {
 			r.getConfirmPublish(),
 			r.getWithoutExchange(),
 			r.opts.Logger,
+			r.getDelayExchange(),
 		)
 	}
 
@@ -417,6 +428,16 @@ func (r *rbroker) getExchange() Exchange {
 	}
 
 	return ex
+}
+
+func (r *rbroker) getDelayExchange() *Exchange {
+	ex := DefaultDelayExchange
+
+	if d, ok := r.opts.Context.Value(durableExchange{}).(bool); ok {
+		ex.Durable = d
+	}
+
+	return &ex
 }
 
 func (r *rbroker) getPrefetchCount() int {

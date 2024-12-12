@@ -21,6 +21,7 @@ const (
 	ExchangeTypeFanout MQExchangeType = "fanout"
 	ExchangeTypeTopic                 = "topic"
 	ExchangeTypeDirect                = "direct"
+	ExchangeTypeDelay                 = "x-delayed-message"
 )
 
 var (
@@ -28,6 +29,11 @@ var (
 		Name: "micro",
 		Type: ExchangeTypeTopic,
 	}
+	DefaultDelayExchange = Exchange{
+		Name: "micro-delay",
+		Type: ExchangeTypeDelay,
+	}
+
 	DefaultRabbitURL       = "amqp://guest:guest@127.0.0.1:5672"
 	DefaultPrefetchCount   = 0
 	DefaultPrefetchGlobal  = false
@@ -61,6 +67,7 @@ type rabbitMQConn struct {
 	prefetchCount   int
 	prefetchGlobal  bool
 	confirmPublish  bool
+	delayExchange   Exchange
 
 	sync.Mutex
 	connected bool
@@ -81,7 +88,7 @@ type Exchange struct {
 	Durable bool
 }
 
-func newRabbitMQConn(ex Exchange, urls []string, prefetchCount int, prefetchGlobal bool, confirmPublish bool, withoutExchange bool, logger logger.Logger) *rabbitMQConn {
+func newRabbitMQConn(ex Exchange, urls []string, prefetchCount int, prefetchGlobal bool, confirmPublish bool, withoutExchange bool, logger logger.Logger, dealyEx ...*Exchange) *rabbitMQConn {
 	var url string
 
 	if len(urls) > 0 && regexp.MustCompile("^amqp(s)?://.*").MatchString(urls[0]) {
@@ -100,6 +107,9 @@ func newRabbitMQConn(ex Exchange, urls []string, prefetchCount int, prefetchGlob
 		close:           make(chan bool),
 		waitConnection:  make(chan struct{}),
 		logger:          logger,
+	}
+	if len(dealyEx) > 0 && dealyEx[0] != nil {
+		ret.delayExchange = *dealyEx[0]
 	}
 	// its bad case of nil == waitConnection, so close it at start
 	close(ret.waitConnection)
@@ -251,13 +261,18 @@ func (r *rabbitMQConn) tryConnect(secure bool, config *amqp.Config) error {
 	}
 
 	if !r.withoutExchange {
-		if r.exchange.Durable {
-			r.Channel.DeclareDurableExchange(r.exchange.Name)
-		} else {
-			r.Channel.DeclareExchange(r.exchange)
+		r.Channel.DeclareExchange(r.exchange)
+		if r.delayExchange != (Exchange{}) {
+			err := r.Channel.DeclareExchange(r.delayExchange, amqp.Table{
+				"x-delayed-type": string(r.exchange.Type),
+			})
+			if err != nil {
+				return err
+			}
 		}
 		r.ExchangeChannel, err = newRabbitChannel(r.Connection, r.prefetchCount, r.prefetchGlobal, r.confirmPublish)
 	}
+
 	return err
 }
 
@@ -284,6 +299,10 @@ func (r *rabbitMQConn) Consume(queue, key string, headers amqp.Table, qArgs amqp
 
 	if !r.withoutExchange {
 		err = consumerChannel.BindQueue(queue, key, r.exchange.Name, headers)
+		if err != nil {
+			return nil, nil, err
+		}
+		err = consumerChannel.BindQueue(queue, key, r.delayExchange.Name, headers)
 		if err != nil {
 			return nil, nil, err
 		}

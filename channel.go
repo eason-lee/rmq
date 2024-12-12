@@ -95,7 +95,11 @@ func (r *rabbitMQChannel) Publish(exchange, key string, message amqp.Publishing)
 	return nil
 }
 
-func (r *rabbitMQChannel) DeclareExchange(ex Exchange) error {
+func (r *rabbitMQChannel) DeclareExchange(ex Exchange, arg ...amqp.Table) error {
+	var args amqp.Table
+	if len(arg) > 0 {
+		args = arg[0]
+	}
 	return r.channel.ExchangeDeclare(
 		ex.Name,         // name
 		string(ex.Type), // kind
@@ -103,19 +107,19 @@ func (r *rabbitMQChannel) DeclareExchange(ex Exchange) error {
 		false,           // autoDelete
 		false,           // internal
 		false,           // noWait
-		nil,             // args
+		args,            // args
 	)
 }
 
-func (r *rabbitMQChannel) DeclareDurableExchange(exchange string) error {
+func (r *rabbitMQChannel) DeclareDurableExchange(ex Exchange) error {
 	return r.channel.ExchangeDeclare(
-		exchange, // name
-		"topic",  // kind
-		true,     // durable
-		false,    // autoDelete
-		false,    // internal
-		false,    // noWait
-		nil,      // args
+		ex.Name,         // name
+		string(ex.Type), // kind
+		true,            // durable
+		false,           // autoDelete
+		false,           // internal
+		false,           // noWait
+		nil,             // args
 	)
 }
 

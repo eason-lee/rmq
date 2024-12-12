@@ -13,7 +13,7 @@ import (
 	"go-micro.dev/v4/broker"
 	"go-micro.dev/v4/server"
 
-	rabbitmq "github.com/quexer/rmq/v4"
+	rabbitmq "github.com/eason-lee/rmq/v4"
 )
 
 type Example struct{}

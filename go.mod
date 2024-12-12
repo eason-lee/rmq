@@ -1,4 +1,4 @@
-module github.com/quexer/rmq/v4
+module github.com/eason-lee/rmq/v4
 
 go 1.20
 

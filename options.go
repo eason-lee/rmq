@@ -33,6 +33,7 @@ type userID struct{}
 type appID struct{}
 type externalAuth struct{}
 type durableExchange struct{}
+type delayTime struct{}
 
 // PublishDeliveryMode client.PublishOption for setting message "delivery mode"
 // mode , Transient (0 or 1) or Persistent (2)
@@ -42,6 +43,17 @@ func PublishDeliveryMode(mode uint8) client.PublishOption {
 			o.Context = context.Background()
 		}
 		o.Context = context.WithValue(o.Context, deliveryMode{}, mode)
+	}
+}
+
+// SetDelayTime client.PublishOption for setting message delay ms time
+func SetDelayTime(ms int32) client.PublishOption {
+	return func(o *client.PublishOptions) {
+		if o.Context == nil {
+			o.Context = context.Background()
+		}
+
+		o.Context = context.WithValue(o.Context, delayTime{}, ms)
 	}
 }
 
